@@ -1,0 +1,21 @@
+name: Cut New Tag from Main
+
+on:
+  repository_dispatch:
+    types:
+      - trigger-downstream
+jobs:
+  trigger-downstream-build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          repository: pixelcat/test-repo3
+          path: test-repo3
+          token: ${{ secrets.TAGGING_AUTH_TOKEN }}
+      - name: Create Upstream Test Branch
+        run: |
+          cd ${GITHUB_WORKSPACE}/test-repo3
+          git checkout -b upstream/${{ github.event.client_payload.ref }}
+          git push origin upstream/${{ github.event.client_payload.ref }}
