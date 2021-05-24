@@ -1,4 +1,4 @@
-name: Cut New Tag from Main
+name: Trigger Downstream Build
 
 on:
   repository_dispatch:
