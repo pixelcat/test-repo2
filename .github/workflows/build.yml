@@ -5,6 +5,7 @@ on:
       - main
       - master
       - releases/*
+      - upstream/*
     tags:
       - v*
 jobs:
@@ -24,6 +25,20 @@ jobs:
       - name: Publish Docker Image
         run: |
           make docker-publish
+      - name: Merge Upstream Patch Branch into Main
+        if: startsWith(github.ref, 'refs/heads/upstream/patch-')
+        uses: devmasx/merge-branch@v1.3.1
+        with:
+          type: now
+          target_branch: main
+          token: ${{ secrets.TAGGING_AUTH_TOKEN }}
+      - name: Create Pull Request for minor/major changes
+        if: startsWith(github.ref, 'refs/heads/upstream/perf-') || startsWith(github.ref, 'refs/heads/upstream/feat')
+        uses: actions/create-pull-request@v3
+        with:
+          token: ${{ secrets.TAGGING_AUTH_TOKEN }}
+          commit-message: "Upstream change: ${{ github.ref }}"
+          delete-branch: true
       - name: Trigger Tag Release workflow
         if: github.ref == 'refs/heads/main'
         uses: peter-evans/repository-dispatch@v1
@@ -37,3 +52,4 @@ jobs:
           token: ${{ secrets.TAGGING_AUTH_TOKEN }}
           event-type: trigger-downstream
           client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'
+

@@ -1,4 +1,4 @@
-name: Trigger Downstream Build
+name: Trigger Downstream Builds
 
 on:
   repository_dispatch:
@@ -9,7 +9,24 @@ jobs:
     runs-on: ubuntu-20.04
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Check out Current Repo
+        uses: actions/checkout@v2
+      - name: Fetch the tag commit history
+        id: process-semver
+        run: |
+          TAG_SUMMARY=$(git show --summary "${{ github.event.client_payload.ref }}")
+          CHANGE_TYPE=patch
+          if echo ${TAG_SUMMARY} | grep -q 'perf'; then
+            echo "Major change"
+          CHANGE_TYPE=perf
+          elif echo ${TAG_SUMMARY} | grep -q 'feat'; then
+            echo "Minor change"
+            CHANGE_TYPE=feat
+          fi
+          echo "::set-output name=change-type::$(echo ${CHANGE_TYPE})"
+
+      - name: Check out Downstream Repo
+        uses: actions/checkout@v2
         with:
           repository: pixelcat/test-repo3
           path: test-repo3
@@ -17,5 +34,13 @@ jobs:
       - name: Create Upstream Test Branch
         run: |
           cd ${GITHUB_WORKSPACE}/test-repo3
-          git checkout -b upstream/${{ github.event.client_payload.ref }}
-          git push origin upstream/${{ github.event.client_payload.ref }}
+          UPSTREAM_BRANCH_NAME="upstream/${{ github.event.client_payload.ref }}"
+          git checkout -b "${CHANGE_TYPE}-${UPSTREAM_BRANCH_NAME}"
+          # Update .config to change upstream version
+          CHANGE_TYPE=${{ steps.output.process-semver.change-type }}
+          COMMIT_MESSAGE="${CHANGE_TYPE}: Updated base image version to ${{ github.event.client_payload.ref }}"
+          UPDATED_VER=$(echo "${{ github.event.client_payload.ref }}" | sed -e 's/^v//g')
+          cat .config | sed -e "s/^DOCKER_BASE_IMAGE_VER=.*$/DOCKER_BASE_IMAGE_VER=${UPDATED_VER}/g"
+          git add .config
+          git commit -m "${COMMIT_MESSAGE}"
+          git push origin "${UPSTREAM_BRANCH_NAME}"
