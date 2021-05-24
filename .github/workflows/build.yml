@@ -34,7 +34,7 @@ jobs:
           token: ${{ secrets.TAGGING_AUTH_TOKEN }}
       - name: Create Pull Request for minor/major changes
         if: startsWith(github.ref, 'refs/heads/upstream/perf-') || startsWith(github.ref, 'refs/heads/upstream/feat')
-        uses: actions/create-pull-request@v3
+        uses: peter-evans/create-pull-request@v3
         with:
           token: ${{ secrets.TAGGING_AUTH_TOKEN }}
           commit-message: "Upstream change: ${{ github.ref }}"
