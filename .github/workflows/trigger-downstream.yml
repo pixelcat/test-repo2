@@ -11,19 +11,8 @@ jobs:
     steps:
       - name: Check out Current Repo
         uses: actions/checkout@v2
-      - name: Fetch the tag commit history
-        id: process-semver
-        run: |
-          TAG_SUMMARY=$(git show --summary "${{ github.event.client_payload.ref }}")
-          CHANGE_TYPE=patch
-          if echo ${TAG_SUMMARY} | grep -q 'perf'; then
-            echo "Major change"
-          CHANGE_TYPE=perf
-          elif echo ${TAG_SUMMARY} | grep -q 'feat'; then
-            echo "Minor change"
-            CHANGE_TYPE=feat
-          fi
-          echo "::set-output name=change-type::$(echo ${CHANGE_TYPE})"
+        with:
+          path: test-repo2
 
       - name: Check out Downstream Repo
         uses: actions/checkout@v2
@@ -33,14 +22,31 @@ jobs:
           token: ${{ secrets.TAGGING_AUTH_TOKEN }}
       - name: Create Upstream Test Branch
         run: |
+          set -ex
+          cd ${GITHUB_WORKSPACE}/test-repo2
+
+          # First act within the current repo
+          git fetch
+          TAG_SUMMARY=$(git show --oneline --summary "${{ github.event.client_payload.ref }}")
+          CHANGE_TYPE=patch
+          if echo ${TAG_SUMMARY} | grep -q 'perf'; then
+            echo "Major change"
+            CHANGE_TYPE=perf
+          elif echo ${TAG_SUMMARY} | grep -q 'feat'; then
+            echo "Minor change"
+            CHANGE_TYPE=feat
+          fi
+
+          # Switch to the second repo
           cd ${GITHUB_WORKSPACE}/test-repo3
-          UPSTREAM_BRANCH_NAME="upstream/${{ github.event.client_payload.ref }}"
-          git checkout -b "${CHANGE_TYPE}-${UPSTREAM_BRANCH_NAME}"
+          UPDATED_VER=$(echo "${{ github.event.client_payload.ref }}" | sed -e 's%refs/tags/v%%g')
+          UPSTREAM_BRANCH_NAME="upstream/${CHANGE_TYPE}-${UPDATED_VER}"
+          git checkout -b "${UPSTREAM_BRANCH_NAME}"
           # Update .config to change upstream version
-          CHANGE_TYPE=${{ steps.output.process-semver.change-type }}
-          COMMIT_MESSAGE="${CHANGE_TYPE}: Updated base image version to ${{ github.event.client_payload.ref }}"
-          UPDATED_VER=$(echo "${{ github.event.client_payload.ref }}" | sed -e 's/^v//g')
-          cat .config | sed -e "s/^DOCKER_BASE_IMAGE_VER=.*$/DOCKER_BASE_IMAGE_VER=${UPDATED_VER}/g"
+          COMMIT_MESSAGE="${CHANGE_TYPE}: Updated base image version to ${UPDATED_VER}"
+          sed -i -e "s%^DOCKER_BASE_IMAGE_VER=.*$%DOCKER_BASE_IMAGE_VER=${UPDATED_VER}%g" .config
           git add .config
+          git config user.email "kstewart@dployr.com"
+          git config user.name "Kenzi Stewart"
           git commit -m "${COMMIT_MESSAGE}"
           git push origin "${UPSTREAM_BRANCH_NAME}"
